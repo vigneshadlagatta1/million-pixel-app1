@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Million Pixels</title>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body{
+margin:0;
+background:#111;
+font-family:Arial;
+overflow:hidden;
+}
+
+/* NAVBAR */
+
+#navbar{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+background:linear-gradient(to right,#ffcc00,#ffaa00);
+display:flex;
+justify-content:center;
+gap:15px;
+padding:12px;
+z-index:1000;
+}
+
+.nav-btn{
+background:#000;
+color:#fff;
+padding:8px 15px;
+border-radius:20px;
+cursor:pointer;
+font-weight:bold;
+}
+
+.nav-btn:hover{
+background:#00e5b0;
+color:#000;
+}
+
+/* CANVAS */
+
+canvas{
+display:block;
+background:#fff;
+margin-top:70px;
+}
+
+canvas{
+margin-top:110px;
+}
+
+/* POPUP */
+
+#popup{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.7);
+justify-content:center;
+align-items:center;
+z-index:2000;
+}
+
+#popup-box{
+background:#000;
+padding:20px;
+width:320px;
+border-radius:10px;
+color:white;
+text-align:center;
+}
+
+input{
+width:90%;
+padding:10px;
+margin:8px;
+border:none;
+border-radius:5px;
+}
+
+button{
+padding:10px;
+margin:5px;
+border:none;
+cursor:pointer;
+border-radius:6px;
+width:120px;
+font-weight:bold;
+}
+
+.upload-btn{
+background:#00e5b0;
+}
+
+.cancel-btn{
+background:#ff4d4d;
+color:white;
+}
+
+/* ========================= */
+/* ADD: TITLE BAR STYLE */
+/* ========================= */
+
+#titlebar{
+
+position:fixed;
+
+top:50px;
+
+left:0;
+
+width:100%;
+
+background:#555;
+
+color:#ffcc00;
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:center;
+
+padding:8px 15px;
+
+font-weight:bold;
+
+z-index:999;
+
+font-size:16px;
+
+}
+
+#title-left{
+
+font-size:18px;
+
+text-shadow:0 0 5px #000;
+
+}
+
+#title-right{
+
+color:white;
+
+font-size:14px;
+
+}
+
+/* ========================= */
+/* ADD: FIX TITLE POSITION */
+/* ========================= */
+
+#titlebar{
+
+position:fixed;
+
+top:0;
+
+left:0;
+
+width:100%;
+
+height:40px;
+
+background:#444;
+
+color:#ffcc00;
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:center;
+
+padding:0 15px;
+
+z-index:2000;
+
+}
+
+
+/* ========================= */
+/* ADD: MOVE NAVBAR BELOW TITLE */
+/* ========================= */
+
+#navbar{
+
+top:40px !important;
+
+}
+
+
+/* ========================= */
+/* ADD: FIX CANVAS POSITION */
+/* ========================= */
+
+canvas{
+
+margin-top:110px !important;
+
+}
+
+#title-right{
+
+position:absolute;
+
+left:50%;
+
+transform:translateX(-50%);
+
+text-align:center;
+
+white-space:nowrap;
+
+}
+
+/* ADD: FORCE SHARP IMAGE RENDERING */
+
+canvas{
+
+image-rendering: pixelated;
+image-rendering: crisp-edges;
+
+}
+
+canvas{
+
+image-rendering: pixelated;
+image-rendering: crisp-edges;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+
+<!-- NAVBAR -->
+
+<div id="navbar">
+
+<div class="nav-btn" onclick="showHome()">Home</div>
+
+<div class="nav-btn" onclick="openBuyPixels()">Buy Pixels</div>
+
+<div class="nav-btn" onclick="showFAQ()">FAQ</div>
+
+<div class="nav-btn" onclick="showPixelList()">Pixel List</div>
+
+<div class="nav-btn" onclick="showContact()">Contact</div>
+
+</div>
+
+
+
+<canvas id="canvas"></canvas>
+
+
+
+<div id="popup">
+<div id="popup-box"></div>
+</div>
+
+<!-- ========================= -->
+<!-- ADD: TITLE BAR -->
+<!-- ========================= -->
+
+<div id="titlebar">
+
+<div id="title-left">
+The Million Pixels Homepage™
+</div>
+
+<div id="title-right">
+1,000,000 pixels • ₹100 per pixel • Own a piece of internet history!
+
+</div>
+
+</div>
+
+<script>
+
+const socket = io("http://127.0.0.1:5000");
+const API = "http://127.0.0.1:5000";
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = "high";
+
+const popup = document.getElementById("popup");
+const popupBox = document.getElementById("popup-box");
+
+let blocks = [];
+let images = {};
+
+let selected=null;
+let isSelecting=false;
+let startX=0;
+let startY=0;
+
+/* ========================= */
+/* ADD: PAYMENT TOKEN */
+/* ========================= */
+
+let uploadToken = null;
+
+
+/* ========================= */
+/* HOMEPAGE */
+/* ========================= */
+
+function showHome(){
+
+popupBox.innerHTML=`
+
+<h2>Million Pixels Homepage</h2>
+
+<p>
+
+Welcome to the Million Pixels project.<br><br>
+
+• Select pixels<br>
+• Upload your brand image<br>
+• Add your website link<br>
+• Get permanent visibility<br><br>
+
+Start by clicking Buy Pixels.
+
+</p>
+
+<button class="upload-btn" onclick="openBuyPixels()">Buy Pixels</button>
+
+<button class="cancel-btn" onclick="popup.style.display='none'">Close</button>
+
+`;
+
+popup.style.display="flex";
+
+}
+
+function showFAQ(){
+
+popupBox.innerHTML=`
+
+<h2>Frequently Asked Questions</h2>
+
+<div style="text-align:left;max-height:300px;overflow:auto;">
+
+<b>What is Million Pixels Homepage?</b>
+<p>
+It is a digital advertising board where you can buy pixels,
+upload your brand image, and add your website link permanently.
+</p>
+
+<b>How much does each pixel cost?</b>
+<p>
+Each pixel costs ₹100.
+</p>
+
+<b>How long will my image stay?</b>
+<p>
+Your image will stay permanently.
+</p>
+
+<b>Can I change my image later?</b>
+<p>
+Currently editing is not supported.
+</p>
+
+<b>Is payment secure?</b>
+<p>
+Yes. Payments are handled securely using Razorpay.
+</p>
+
+<b>Who developed this website?</b>
+<p>
+Developed and managed by Adlagatta Mahendra.
+</p>
+
+</div>
+
+<button onclick="popup.style.display='none'" class="cancel-btn">
+Close
+</button>
+
+`;
+
+popup.style.display="flex";
+
+}
+
+
+function showContact(){
+
+popupBox.innerHTML=`
+
+<h2>Contact</h2>
+
+<p>
+
+Email:<br><br>
+
+<a href="mailto:adlagattamahendra@email.com"
+style="color:#00e5b0;">
+adlagattamahendra@email.com
+</a>
+
+<br><br>
+
+Response within 24 hours.
+
+</p>
+
+<button onclick="popup.style.display='none'"
+class="cancel-btn">
+Close
+</button>
+
+`;
+
+popup.style.display="flex";
+
+}
+
+/* ========================= */
+/* PIXEL LIST */
+/* ========================= */
+
+function showPixelList(){
+
+let html=`<h2>Pixel Owners</h2>
+<div style="max-height:300px;overflow:auto;">`;
+
+if(blocks.length===0){
+
+html+=`<p>No pixels sold yet</p>`;
+
+}else{
+
+blocks.forEach(b=>{
+
+html+=`
+
+<div style="
+padding:8px;
+margin:5px;
+background:#111;
+border-radius:5px;
+border:1px solid #00e5b0;
+">
+
+<b>${b.name}</b><br>
+
+${b.link ? `<small>${b.link}</small>` : ``}
+
+</div>
+
+`;
+
+});
+
+}
+
+html+=`</div>
+
+<button class="cancel-btn" onclick="popup.style.display='none'">Close</button>
+`;
+
+popupBox.innerHTML=html;
+popup.style.display="flex";
+
+}
+
+
+/* ========================= */
+/* RESIZE */
+/* ========================= */
+
+function resize(){
+
+const ratio = window.devicePixelRatio || 1;
+
+canvas.width = window.innerWidth * ratio;
+canvas.height = window.innerHeight * ratio;
+
+canvas.style.width = window.innerWidth + "px";
+canvas.style.height = window.innerHeight + "px";
+
+ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+draw();
+
+canvas.style.cursor = "crosshair";
+
+}
+
+resize();
+window.addEventListener("resize",resize);
+
+
+/* ========================= */
+/* LOAD */
+/* ========================= */
+
+async function load(){
+
+const res=await fetch(API+"/blocks");
+const data=await res.json();
+
+blocks=data.blocks||[];
+
+updatePixelCounter();
+preload();
+
+}
+
+socket.on("updated",load);
+load();
+
+
+/* ========================= */
+/* PIXEL COUNTER */
+/* ========================= */
+
+function updatePixelCounter(){
+
+let sold = 0;
+
+blocks.forEach(b=>{
+
+const w = parseInt(b.width);
+const h = parseInt(b.height);
+
+if(!isNaN(w) && !isNaN(h)){
+sold += w * h;
+}
+
+});
+
+const total = 1000000;
+
+const available = total - sold;
+
+document.getElementById("title-right").innerHTML = `
+1,000,000 pixels • ₹100 per pixel • Own a piece of internet history!
+<br>
+<span style="color:#00e5b0;">
+Sold: ${sold.toLocaleString()} pixels
+</span>
+&nbsp;&nbsp;|&nbsp;&nbsp;
+<span style="color:#fff;">
+Available: ${available.toLocaleString()} pixels
+</span>
+`;
+
+}
+
+
+/* ========================= */
+/* PRELOAD */
+/* ========================= */
+
+function preload(){
+
+let count=0;
+
+if(blocks.length===0){
+draw();
+return;
+}
+
+blocks.forEach(b=>{
+
+const img=new Image();
+img.src=b.image;
+
+img.onload=()=>{
+images[b.image]=img;
+count++;
+
+if(count===blocks.length)
+draw();
+
+};
+
+});
+
+}
+
+
+/* ========================= */
+/* DRAW */
+/* ========================= */
+
+function draw(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ctx.fillStyle="white";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+blocks.forEach(b=>{
+
+const img=images[b.image];
+
+if(img){
+
+ctx.drawImage(
+img,
+b.minCol,
+b.minRow,
+b.width,
+b.height
+);
+
+}
+
+});
+
+if(selected){
+
+ctx.fillStyle="rgba(0,255,255,0.3)";
+ctx.strokeStyle="#00ffff";
+
+ctx.fillRect(
+selected.minCol,
+selected.minRow,
+selected.width,
+selected.height
+);
+
+ctx.strokeRect(
+selected.minCol,
+selected.minRow,
+selected.width,
+selected.height
+);
+
+}
+
+}
+
+
+/* ========================= */
+/* SELECT */
+/* ========================= */
+
+canvas.addEventListener("click", function(e){
+
+const rect = canvas.getBoundingClientRect();
+
+const scaleX = canvas.width / rect.width;
+const scaleY = canvas.height / rect.height;
+
+const x = (e.clientX - rect.left) * scaleX;
+const y = (e.clientY - rect.top) * scaleY;
+
+let foundBlock = null;
+
+for(let b of blocks){
+
+if(
+x >= b.minCol &&
+x <= b.minCol + b.width &&
+y >= b.minRow &&
+y <= b.minRow + b.height
+){
+foundBlock = b;
+break;
+}
+
+}
+
+if(foundBlock){
+
+popupBox.innerHTML = `
+<h2>${foundBlock.name}</h2>
+
+<button class="upload-btn" onclick="
+let url='${foundBlock.link}';
+if(url && !url.startsWith('http'))
+url='https://'+url;
+window.open(url,'_blank');
+">
+Visit Website
+</button>
+
+<button class="cancel-btn"
+onclick="popup.style.display='none'">
+Close
+</button>
+`;
+
+popup.style.display = "flex";
+
+}
+
+});
+canvas.addEventListener("mousedown", function(e){
+
+const rect = canvas.getBoundingClientRect();
+
+const scaleX = canvas.width / rect.width;
+const scaleY = canvas.height / rect.height;
+
+const x = (e.clientX - rect.left) * scaleX;
+const y = (e.clientY - rect.top) * scaleY;
+
+isSelecting = true;
+
+startX = x;
+startY = y;
+
+selected = {
+minCol: x,
+minRow: y,
+width: 0,
+height: 0
+};
+
+draw();
+
+});
+
+
+canvas.addEventListener("mousemove", function(e){
+
+const rect = canvas.getBoundingClientRect();
+
+const scaleX = canvas.width / rect.width;
+const scaleY = canvas.height / rect.height;
+
+const x = (e.clientX - rect.left) * scaleX;
+const y = (e.clientY - rect.top) * scaleY;
+
+/* hover cursor */
+let hover = false;
+
+for(let b of blocks){
+
+if(
+x >= b.minCol &&
+x <= b.minCol + b.width &&
+y >= b.minRow &&
+y <= b.minRow + b.height
+){
+hover = true;
+break;
+}
+
+}
+
+canvas.style.cursor = hover ? "pointer" : "crosshair";
+
+/* selection */
+if(!isSelecting) return;
+
+selected.width = x - startX;
+selected.height = y - startY;
+
+draw();
+
+});
+
+
+canvas.addEventListener("mouseup", function(){
+
+isSelecting = false;
+
+if(selected.width < 0){
+
+selected.minCol += selected.width;
+selected.width = Math.abs(selected.width);
+
+}
+
+if(selected.height < 0){
+
+selected.minRow += selected.height;
+selected.height = Math.abs(selected.height);
+
+}
+
+draw();
+
+});
+
+/* ========================= */
+/* CLICK ONLY SELECTION */
+/* ========================= */
+
+const CLICK_SELECT_SIZE = 50; // size of block (change if needed)
+
+canvas.addEventListener("dblclick", function(e){
+
+const rect = canvas.getBoundingClientRect();
+
+const x = e.clientX - rect.left;
+const y = e.clientY - rect.top;
+
+/* create fixed block selection */
+selected = {
+
+minCol: x - CLICK_SELECT_SIZE/2,
+minRow: y - CLICK_SELECT_SIZE/2,
+width: CLICK_SELECT_SIZE,
+height: CLICK_SELECT_SIZE
+
+};
+
+draw();
+
+});
+/* ========================= */
+/* EXACT PIXEL SELECTION */
+/* CLICK = SELECT EXACT PIXEL */
+/* ========================= */
+
+const PIXEL_SIZE = 1; // or 10 if your grid uses 10x10 blocks
+
+canvas.addEventListener("click", function(e){
+
+const rect = canvas.getBoundingClientRect();
+
+/* convert mouse → canvas coordinate */
+let x = e.clientX - rect.left;
+let y = e.clientY - rect.top;
+
+/* snap to exact pixel grid */
+x = Math.floor(x / PIXEL_SIZE) * PIXEL_SIZE;
+y = Math.floor(y / PIXEL_SIZE) * PIXEL_SIZE;
+
+/* create exact pixel selection */
+selected = {
+
+minCol: x,
+minRow: y,
+width: PIXEL_SIZE,
+height: PIXEL_SIZE
+
+};
+
+draw();
+
+console.log("Selected pixel:", x, y);
+
+});
+
+/* ========================= */
+/* BUY POPUP */
+/* ========================= */
+
+function openBuyPixels(){
+
+if(!selected){
+alert("Select pixels first");
+return;
+}
+
+const pixels = Math.floor(selected.width) * Math.floor(selected.height);
+const price = pixels * 100;
+
+popupBox.innerHTML=`
+
+<h2>Upload Your Block</h2>
+
+Selected Pixels: <b>${pixels}</b><br>
+Price: <b style="color:#00e5b0;">₹${price}</b>
+
+<input id="name" placeholder="Brand Name">
+
+<input id="link" placeholder="Website">
+
+<input type="file" id="file">
+
+<br>
+
+<button class="upload-btn" onclick="payNow()">Pay & Upload</button>
+<button class="cancel-btn" onclick="popup.style.display='none'">Cancel</button>
+
+`;
+
+popup.style.display="flex";
+
+}
+
+
+/* ========================= */
+/* SECURE PAYMENT */
+/* ========================= */
+
+async function payNow(){
+
+if(!selected){
+alert("Select pixels first");
+return;
+}
+
+const pixels = Math.floor(selected.width) * Math.floor(selected.height);
+const amount = pixels * 100;
+
+const orderRes = await fetch(API+"/create-order",{
+
+method:"POST",
+headers:{ "Content-Type":"application/json" },
+
+body:JSON.stringify({ amount })
+
+});
+
+const order = await orderRes.json();
+
+const options = {
+
+key: "YOUR_KEY_ID",
+
+amount: order.amount,
+
+currency: "INR",
+
+order_id: order.id,
+
+handler: async function(response){
+
+const verifyRes = await fetch(API+"/verify-payment",{
+
+method:"POST",
+headers:{ "Content-Type":"application/json" },
+
+body:JSON.stringify(response)
+
+});
+
+const verify = await verifyRes.json();
+
+if(verify.success){
+
+uploadToken = verify.token;
+
+alert("Payment Verified");
+
+upload();
+
+}else{
+
+alert("Payment Failed");
+
+}
+
+}
+
+};
+
+const rzp = new Razorpay(options);
+rzp.open();
+
+}
+
+
+/* ========================= */
+/* SECURE UPLOAD */
+/* ========================= */
+
+async function upload(){
+
+if(!uploadToken){
+alert("Payment not verified");
+return;
+}
+
+const name=document.getElementById("name").value;
+const link=document.getElementById("link").value;
+const file=document.getElementById("file").files[0];
+
+if(!name.trim()){
+
+alert("Brand name required");
+return;
+
+}
+
+if(!file){
+
+alert("Image required");
+return;
+
+}
+
+const fd=new FormData();
+
+fd.append("file", file);
+fd.append("token", uploadToken);
+
+const up=await fetch(API+"/upload",{
+
+method:"POST",
+body:fd
+
+});
+
+const data=await up.json();
+
+await fetch(API+"/save",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+
+image:data.url,
+name,
+link,
+...selected,
+token:uploadToken
+
+})
+
+});
+
+popup.style.display="none";
+
+load();
+
+}
+
+</script>
+
+</body>
+</html>

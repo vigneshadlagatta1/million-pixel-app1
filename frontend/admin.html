@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Million Pixels Admin Dashboard</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+
+<style>
+
+body{
+background:#111;
+color:#fff;
+font-family:Arial;
+margin:0;
+padding:20px;
+}
+
+/* HEADER */
+
+.header{
+background:#000;
+padding:15px;
+border-radius:10px;
+border:1px solid #00e5b0;
+margin-bottom:20px;
+}
+
+.header h1{
+margin:0;
+color:#00e5b0;
+}
+
+/* GRID */
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+gap:15px;
+}
+
+/* CARDS */
+
+.card{
+background:#000;
+padding:15px;
+border-radius:10px;
+border:1px solid #00e5b0;
+box-shadow:0 0 10px rgba(0,229,176,0.2);
+}
+
+.card h3{
+margin-top:0;
+color:#ffcc00;
+}
+
+.big{
+font-size:28px;
+color:#00e5b0;
+margin-top:10px;
+}
+
+/* BUYERS LIST */
+
+.list{
+margin-top:20px;
+}
+
+.item{
+background:#000;
+padding:10px;
+margin:8px 0;
+border-radius:6px;
+border:1px solid #333;
+}
+
+.item:hover{
+border:1px solid #00e5b0;
+}
+
+/* REFRESH BUTTON */
+
+.refresh{
+background:#00e5b0;
+color:#000;
+padding:10px 15px;
+border:none;
+border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+margin-top:15px;
+}
+
+.refresh:hover{
+background:#00c49a;
+}
+
+</style>
+<button onclick="logout()" class="refresh">Logout</button>
+</head>
+
+<body>
+
+<div class="header">
+
+<h1>Million Pixels Analytics Dashboard</h1>
+
+<button class="refresh" onclick="loadAnalytics()">Refresh</button>
+
+
+
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h3>Total Revenue</h3>
+<div id="revenue" class="big">₹0</div>
+</div>
+
+<div class="card">
+<h3>Sold Pixels</h3>
+<div id="sold" class="big">0</div>
+</div>
+
+<div class="card">
+<h3>Available Pixels</h3>
+<div id="available" class="big">0</div>
+</div>
+
+<div class="card">
+<h3>Total Blocks</h3>
+<div id="blocks" class="big">0</div>
+</div>
+
+</div>
+
+
+<div class="card list">
+
+<h3>Recent Buyers</h3>
+
+<div id="buyers"></div>
+
+</div>
+
+<script>
+
+/* ================= CHECK LOGIN FIRST ================= */
+
+/* ================= CHECK LOGIN FIRST ================= */
+
+const adminKey = localStorage.getItem("adminKey");
+
+if(!adminKey){
+
+window.location = "admin-login.html";
+
+}else{
+
+/* VERIFY WITH SERVER */
+
+fetch("http://127.0.0.1:5000/analytics", {
+
+headers:{
+"x-admin-key": adminKey
+}
+
+})
+.then(res => {
+
+if(res.status === 403){
+
+alert("Invalid password");
+
+logout();
+
+}
+
+})
+.catch(()=>{
+
+logout();
+
+});
+
+}
+
+/* ================= CONFIG ================= */
+
+const API = "http://127.0.0.1:5000";
+
+/* ================= CONNECT SOCKET ================= */
+
+const socket = io(API);
+
+/* ================= LOAD ANALYTICS FUNCTION ================= */
+
+async function loadAnalytics(){
+
+try{
+
+const res = await fetch(API + "/analytics",{
+
+headers:{
+"x-admin-key": adminKey
+}
+
+});
+
+/* ================= HANDLE UNAUTHORIZED ================= */
+
+if(res.status === 403){
+
+alert("Session expired or invalid login");
+
+logout();
+
+return;
+
+}
+
+const data = await res.json();
+
+/* ================= VALIDATE DATA ================= */
+
+if(!data || data.error){
+
+console.log("Analytics error:", data.error);
+return;
+
+}
+
+/* ================= UPDATE CARDS ================= */
+
+document.getElementById("revenue").innerText =
+"₹" + (data.totalRevenue || 0).toLocaleString();
+
+document.getElementById("sold").innerText =
+(data.soldPixels || 0).toLocaleString();
+
+document.getElementById("available").innerText =
+(data.availablePixels || 0).toLocaleString();
+
+document.getElementById("blocks").innerText =
+(data.totalBlocks || 0).toLocaleString();
+
+/* ================= UPDATE BUYERS ================= */
+
+let html = "";
+
+data.blocks.forEach((b, index)=>{
+
+const pixels = (Number(b.width)||0) * (Number(b.height)||0);
+
+html += `
+<div class="item">
+
+<b>${b.name}</b><br>
+
+Pixels: ${pixels.toLocaleString()}<br>
+
+${b.link || ""}
+
+<br><br>
+
+<button onclick="deleteBlock(${index}, '${b.name}', ${pixels})"
+style="
+background:red;
+color:white;
+border:none;
+padding:6px 12px;
+cursor:pointer;
+border-radius:5px;
+">
+Delete
+</button>
+
+</div>
+`;
+
+});
+document.getElementById("buyers").innerHTML = html;
+
+}catch(err){
+
+console.log("Analytics error:", err);
+
+}
+
+}
+
+/* ================= LOAD ON START ================= */
+
+loadAnalytics();
+
+/* ================= REAL-TIME SOCKET UPDATE ================= */
+
+socket.on("updated", () => {
+
+console.log("Live update received");
+
+loadAnalytics();
+
+});
+
+/* ================= AUTO REFRESH BACKUP ================= */
+
+setInterval(loadAnalytics, 10000);
+
+/* ================= LOGOUT FUNCTION ================= */
+
+function logout(){
+
+localStorage.removeItem("adminKey");
+
+window.location = "admin-login.html";
+
+}
+
+/* Delete Block*/
+
+async function deleteBlock(index, name, pixels){
+
+const adminKey = localStorage.getItem("adminKey");
+
+if(!adminKey){
+
+alert("Admin login required");
+logout();
+return;
+
+}
+
+const confirmDelete = confirm(
+`Delete block?
+
+Name: ${name}
+Pixels: ${pixels.toLocaleString()}`
+);
+
+if(!confirmDelete) return;
+
+const res = await fetch(API + "/delete-block", {
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json",
+"x-admin-key": adminKey
+},
+
+body:JSON.stringify({
+index:index
+})
+
+});
+
+if(res.status === 403){
+
+alert("Unauthorized. Please login again.");
+logout();
+return;
+
+}
+
+const data = await res.json();
+
+if(data.success){
+
+alert("Block deleted successfully");
+
+loadAnalytics();
+
+}else{
+
+alert("Delete failed");
+
+}
+
+}
+
+</script>
+</body>
+</html>
