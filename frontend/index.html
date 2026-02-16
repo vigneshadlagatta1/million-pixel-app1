@@ -231,18 +231,71 @@ white-space:nowrap;
 
 /* ADD: FORCE SHARP IMAGE RENDERING */
 
-canvas{
-
-image-rendering: pixelated;
-image-rendering: crisp-edges;
-
+canvas {
+    /* Stop the browser from interpolating (blurring) the canvas when zoomed */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    
+    /* Ensure existing margins are kept */
+    display: block;
+    margin-top: 110px !important;
 }
 
-canvas{
+/* ========================= */
+/* NANO GLOW BORDER */
+/* ========================= */
 
-image-rendering: pixelated;
-image-rendering: crisp-edges;
+:root {
+  --neon-cyan: #00f3ff;
+  --neon-pink: #bc13fe;
+  --bg-dark: #111;
+}
 
+.nano-canvas-border {
+  position: relative;
+  z-index: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 3px;
+}
+
+.nano-canvas-border::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  left: -50%;
+  top: -50%;
+  width: 200%;
+  height: 200%;
+  background-color: var(--bg-dark);
+  background-repeat: no-repeat;
+  background-size: 50% 50%;
+  background-image: conic-gradient(
+    transparent,
+    var(--neon-cyan),
+    transparent 30%
+  );
+  animation: rotate 4s linear infinite;
+}
+
+.nano-canvas-border::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 3px;
+  top: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  background: var(--bg-dark);
+  border-radius: 8px;
+}
+
+@keyframes rotate {
+  100% {
+    transform: rotate(1turn);
+  }
 }
 
 </style>
@@ -270,7 +323,9 @@ image-rendering: crisp-edges;
 
 
 
-<canvas id="canvas"></canvas>
+<div class="nano-canvas-border">
+    <canvas id="canvas"></canvas>
+</div>
 
 
 
@@ -303,8 +358,11 @@ const API = "http://127.0.0.1:5000";
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-ctx.imageSmoothingEnabled = true;
-ctx.imageSmoothingQuality = "high";
+// DISABLING smoothing keeps pixels sharp and prevents the "blurry" look
+ctx.imageSmoothingEnabled = false; 
+// Webkit/Moz prefixes for older browser compatibility (optional but recommended)
+ctx.webkitImageSmoothingEnabled = false;
+ctx.mozImageSmoothingEnabled = false;
 
 const popup = document.getElementById("popup");
 const popupBox = document.getElementById("popup-box");
@@ -579,290 +637,239 @@ Available: ${available.toLocaleString()} pixels
 /* PRELOAD */
 /* ========================= */
 
-function preload(){
+function preload() {
+    let count = 0;
+    if (blocks.length === 0) { draw(); return; }
 
-let count=0;
+    blocks.forEach(b => {
+        const img = new Image();
 
-if(blocks.length===0){
-draw();
-return;
+        // Handle URLs
+        if (b.image.startsWith("http")) {
+            img.src = b.image;
+        } else {
+            const cleanPath = b.image.startsWith("/") ? b.image.slice(1) : b.image;
+            img.src = API + "/" + cleanPath;
+        }
+
+        // REMOVED: img.crossOrigin = "Anonymous";  <-- This was causing the CORS block
+
+        img.onload = () => {
+            images[b.image] = img;
+            count++;
+            if (count === blocks.length) draw();
+        };
+
+        img.onerror = () => {
+            console.error("Failed to load:", img.src);
+            count++;
+            if (count === blocks.length) draw();
+        };
+    });
 }
-
-blocks.forEach(b=>{
-
-const img=new Image();
-img.src=b.image;
-
-img.onload=()=>{
-images[b.image]=img;
-count++;
-
-if(count===blocks.length)
-draw();
-
-};
-
-});
-
-}
-
+/* ========================= */
+/* DRAW */
+/* ========================= */
 
 /* ========================= */
 /* DRAW */
 /* ========================= */
 
-function draw(){
+function draw() {
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-ctx.clearRect(0,0,canvas.width,canvas.height);
+    // Draw white background
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-ctx.fillStyle="white";
-ctx.fillRect(0,0,canvas.width,canvas.height);
+    // 1. DRAW ALL UPLOADED BLOCKS
+    blocks.forEach(b => {
+        const img = images[b.image];
 
-blocks.forEach(b=>{
+        if (img) {
+            // FIX: Use standard drawImage to FORCE the image to fill the selected pixels.
+            // This ensures the customer gets exactly the size they paid for.
+            ctx.drawImage(
+                img,
+                Math.floor(b.minCol),
+                Math.floor(b.minRow),
+                Math.floor(b.width),
+                Math.floor(b.height)
+            );
+        }
+    });
 
-const img=images[b.image];
+    // 2. DRAW SELECTION BOX (IF ACTIVE)
+    if (selected) {
+        /* glow effect */
+        ctx.shadowColor = "#00f3ff";
+        ctx.shadowBlur = 20;
 
-if(img){
+        ctx.fillStyle = "rgba(0,255,255,0.3)";
+        ctx.strokeStyle = "#00ffff";
+        ctx.lineWidth = 2;
 
-ctx.drawImage(
-img,
-b.minCol,
-b.minRow,
-b.width,
-b.height
-);
+        ctx.fillRect(
+            selected.minCol,
+            selected.minRow,
+            selected.width,
+            selected.height
+        );
 
+        ctx.strokeRect(
+            selected.minCol,
+            selected.minRow,
+            selected.width,
+            selected.height
+        );
+
+        /* reset glow */
+        ctx.shadowBlur = 0;
+    }
 }
-
-});
-
-if(selected){
-
-ctx.fillStyle="rgba(0,255,255,0.3)";
-ctx.strokeStyle="#00ffff";
-
-ctx.fillRect(
-selected.minCol,
-selected.minRow,
-selected.width,
-selected.height
-);
-
-ctx.strokeRect(
-selected.minCol,
-selected.minRow,
-selected.width,
-selected.height
-);
-
-}
-
-}
-
 
 /* ========================= */
-/* SELECT */
+/* SELECT & INTERACTION */
 /* ========================= */
 
-canvas.addEventListener("click", function(e){
-
-const rect = canvas.getBoundingClientRect();
-
-const scaleX = canvas.width / rect.width;
-const scaleY = canvas.height / rect.height;
-
-const x = (e.clientX - rect.left) * scaleX;
-const y = (e.clientY - rect.top) * scaleY;
-
-let foundBlock = null;
-
-for(let b of blocks){
-
-if(
-x >= b.minCol &&
-x <= b.minCol + b.width &&
-y >= b.minRow &&
-y <= b.minRow + b.height
-){
-foundBlock = b;
-break;
+// Helper to get exact canvas coordinates
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
 }
 
-}
+let isDragging = false;
 
-if(foundBlock){
+/* 1. MOUSE DOWN - Start Selection */
+canvas.addEventListener("mousedown", function(e) {
+  const pos = getMousePos(e);
+  
+  isSelecting = true;
+  isDragging = false; // Reset drag status
+  
+  startX = pos.x;
+  startY = pos.y;
 
-popupBox.innerHTML = `
-<h2>${foundBlock.name}</h2>
+  selected = {
+    minCol: startX,
+    minRow: startY,
+    width: 0,
+    height: 0
+  };
 
-<button class="upload-btn" onclick="
-let url='${foundBlock.link}';
-if(url && !url.startsWith('http'))
-url='https://'+url;
-window.open(url,'_blank');
-">
-Visit Website
-</button>
-
-<button class="cancel-btn"
-onclick="popup.style.display='none'">
-Close
-</button>
-`;
-
-popup.style.display = "flex";
-
-}
-
-});
-canvas.addEventListener("mousedown", function(e){
-
-const rect = canvas.getBoundingClientRect();
-
-const scaleX = canvas.width / rect.width;
-const scaleY = canvas.height / rect.height;
-
-const x = (e.clientX - rect.left) * scaleX;
-const y = (e.clientY - rect.top) * scaleY;
-
-isSelecting = true;
-
-startX = x;
-startY = y;
-
-selected = {
-minCol: x,
-minRow: y,
-width: 0,
-height: 0
-};
-
-draw();
-
+  draw();
 });
 
+/* 2. MOUSE MOVE - Update Cursor & Selection Box */
+canvas.addEventListener("mousemove", function(e) {
+  const pos = getMousePos(e);
 
-canvas.addEventListener("mousemove", function(e){
+  /* A. Handle Cursor Hover Style */
+  let hover = false;
+  for (let b of blocks) {
+    if (
+      pos.x >= b.minCol &&
+      pos.x <= b.minCol + b.width &&
+      pos.y >= b.minRow &&
+      pos.y <= b.minRow + b.height
+    ) {
+      hover = true;
+      break;
+    }
+  }
+  canvas.style.cursor = hover ? "pointer" : "crosshair";
 
-const rect = canvas.getBoundingClientRect();
+  /* B. Handle Dragging Selection */
+  if (isSelecting) {
+    selected.width = pos.x - startX;
+    selected.height = pos.y - startY;
 
-const scaleX = canvas.width / rect.width;
-const scaleY = canvas.height / rect.height;
+    // If moved significantly, mark as a drag operation
+    if (Math.abs(selected.width) > 2 || Math.abs(selected.height) > 2) {
+      isDragging = true;
+    }
 
-const x = (e.clientX - rect.left) * scaleX;
-const y = (e.clientY - rect.top) * scaleY;
-
-/* hover cursor */
-let hover = false;
-
-for(let b of blocks){
-
-if(
-x >= b.minCol &&
-x <= b.minCol + b.width &&
-y >= b.minRow &&
-y <= b.minRow + b.height
-){
-hover = true;
-break;
-}
-
-}
-
-canvas.style.cursor = hover ? "pointer" : "crosshair";
-
-/* selection */
-if(!isSelecting) return;
-
-selected.width = x - startX;
-selected.height = y - startY;
-
-draw();
-
+    draw();
+  }
 });
 
+/* 3. MOUSE UP - Finalize Selection */
+canvas.addEventListener("mouseup", function() {
+  isSelecting = false;
 
-canvas.addEventListener("mouseup", function(){
+  // Fix negative width/height (drawing backwards)
+  if (selected.width < 0) {
+    selected.minCol += selected.width;
+    selected.width = Math.abs(selected.width);
+  }
 
-isSelecting = false;
+  if (selected.height < 0) {
+    selected.minRow += selected.height;
+    selected.height = Math.abs(selected.height);
+  }
 
-if(selected.width < 0){
-
-selected.minCol += selected.width;
-selected.width = Math.abs(selected.width);
-
-}
-
-if(selected.height < 0){
-
-selected.minRow += selected.height;
-selected.height = Math.abs(selected.height);
-
-}
-
-draw();
-
+  draw();
 });
 
-/* ========================= */
-/* CLICK ONLY SELECTION */
-/* ========================= */
+/* 4. CLICK - Open Link OR Create Default Block */
+canvas.addEventListener("click", function(e) {
+  const pos = getMousePos(e);
 
-const CLICK_SELECT_SIZE = 50; // size of block (change if needed)
+  // Check if clicked on a sold block
+  let foundBlock = null;
+  for (let b of blocks) {
+    if (
+      pos.x >= b.minCol &&
+      pos.x <= b.minCol + b.width &&
+      pos.y >= b.minRow &&
+      pos.y <= b.minRow + b.height
+    ) {
+      foundBlock = b;
+      break;
+    }
+  }
 
-canvas.addEventListener("dblclick", function(e){
+  if (foundBlock) {
+    // If clicked a sold block, open the popup
+    popupBox.innerHTML = `
+      <h2>${foundBlock.name}</h2>
+      
+      <button class="upload-btn" onclick="
+        let url='${foundBlock.link}';
+        if(url && !url.startsWith('http')) url='https://'+url;
+        window.open(url,'_blank');
+      ">
+      Visit Website
+      </button>
 
-const rect = canvas.getBoundingClientRect();
+      <button class="cancel-btn" onclick="popup.style.display='none'">
+      Close
+      </button>
+    `;
+    popup.style.display = "flex";
+    
+    selected = null; // Deselect to hide the selection box
+    draw();
+    return;
+  }
 
-const x = e.clientX - rect.left;
-const y = e.clientY - rect.top;
-
-/* create fixed block selection */
-selected = {
-
-minCol: x - CLICK_SELECT_SIZE/2,
-minRow: y - CLICK_SELECT_SIZE/2,
-width: CLICK_SELECT_SIZE,
-height: CLICK_SELECT_SIZE
-
-};
-
-draw();
-
-});
-/* ========================= */
-/* EXACT PIXEL SELECTION */
-/* CLICK = SELECT EXACT PIXEL */
-/* ========================= */
-
-const PIXEL_SIZE = 1; // or 10 if your grid uses 10x10 blocks
-
-canvas.addEventListener("click", function(e){
-
-const rect = canvas.getBoundingClientRect();
-
-/* convert mouse → canvas coordinate */
-let x = e.clientX - rect.left;
-let y = e.clientY - rect.top;
-
-/* snap to exact pixel grid */
-x = Math.floor(x / PIXEL_SIZE) * PIXEL_SIZE;
-y = Math.floor(y / PIXEL_SIZE) * PIXEL_SIZE;
-
-/* create exact pixel selection */
-selected = {
-
-minCol: x,
-minRow: y,
-width: PIXEL_SIZE,
-height: PIXEL_SIZE
-
-};
-
-draw();
-
-console.log("Selected pixel:", x, y);
-
+  // If clicked empty space AND didn't drag, create a default 10x10 block
+  if (!isDragging && !foundBlock) {
+    const DEFAULT_SIZE = 10;
+    selected = {
+      minCol: pos.x - (DEFAULT_SIZE / 2),
+      minRow: pos.y - (DEFAULT_SIZE / 2),
+      width: DEFAULT_SIZE,
+      height: DEFAULT_SIZE
+    };
+    draw();
+  }
 });
 
 /* ========================= */
@@ -1039,12 +1046,46 @@ token:uploadToken
 
 });
 
-popup.style.display="none";
+<!-- popup.style.display="none"; -->
 
 load();
 
 }
 
+function drawImageProp(ctx, img, x, y, w, h, offsetX, offsetY) {
+    if (arguments.length === 2) {
+        x = y = 0;
+        w = ctx.canvas.width;
+        h = ctx.canvas.height;
+    }
+
+    // Default offset is center
+    offsetX = typeof offsetX === "number" ? offsetX : 0.5;
+    offsetY = typeof offsetY === "number" ? offsetY : 0.5;
+
+    // Keep bounds [0.0, 1.0]
+    if (offsetX < 0) offsetX = 0;
+    if (offsetY < 0) offsetY = 0;
+    if (offsetX > 1) offsetX = 1;
+    if (offsetY > 1) offsetY = 1;
+
+    var iw = img.width,
+        ih = img.height,
+        r = Math.min(w / iw, h / ih),
+        nw = iw * r,   // new prop. width
+        nh = ih * r,   // new prop. height
+        cx, cy, cw, ch, ar = 1;
+
+    // Calculate center shift
+    cx = (w - nw) * offsetX;
+    cy = (h - nh) * offsetY;
+
+    // Draw the image centered
+    // optional: ctx.fillStyle = "#000"; 
+    // optional: ctx.fillRect(x, y, w, h); // Fill background black if aspect ratio differs
+    
+    ctx.drawImage(img, x + cx, y + cy, nw, nh);
+}
 </script>
 
 </body>

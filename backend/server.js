@@ -149,7 +149,7 @@ Bucket: BUCKET,
 Key: key,
 Body: req.file.buffer,
 ContentType: req.file.mimetype,
-CacheControl: "public, max-age=31536000"
+CacheControl: "public, max-age=31536000, immutable"
 
 }).promise();
 
