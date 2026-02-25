@@ -1,0 +1,178 @@
+}
+
+const key = `uploads/${Date.now()}_${req.file.originalname}`;
+ksuccess:false,
+error:"Block not found"
+});
+
+}
+
+/* DELETE BLOCK */
+
+existing.blocks.splice(index, 1);
+
+/* SAVE UPDATED BLOCKS */
+
+await s3.putObject({
+
+Bucket: BUCKET,
+Key: "blocks.json",
+Body: JSON.stringify(existing),
+ContentType: "application/json"
+
+}).promise();
+
+/* UPDATE CLIENTS */
+
+io.emit("updated");
+
+res.json({
+success:true
+});
+
+} catch(err){
+
+console.log("DELETE ERROR:", err);
+
+res.json({
+success:false,
+error:"Server error"
+});
+
+}
+
+});
+
+/* ================= START SERVER ================= */
+
+server.listen(5000, () => {
+
+console.log("🔥 Backend running on 5000");
+
+});
+
+/* ================= ANALYTICS ================= */
+
+app.get("/analytics", async (req, res) => {
+
+try {
+
+let existing = { blocks: [] };
+
+try {
+
+const data = await s3.getObject({
+Bucket: BUCKET,
+Key: "blocks.json"
+}).promise();
+
+existing = JSON.parse(data.Body.toString());
+
+} catch {}
+
+const blocks = existing.blocks || [];
+
+let totalPixels = 1000000;
+let soldPixels = 0;
+let totalRevenue = 0;
+
+blocks.forEach(b => {
+
+const width = Number(b.width) || 0;
+const height = Number(b.height) || 0;
+
+const pixels = width * height;
+
+soldPixels += pixels;
+
+totalRevenue += pixels * 100;
+
+});
+
+const availablePixels = totalPixels - soldPixels;
+
+res.json({
+
+totalPixels,
+soldPixels,
+availablePixels,
+totalRevenue,
+totalBlocks: blocks.length,
+blocks: blocks.slice(-20).reverse()
+
+});
+
+} catch(err){
+
+res.status(500).json({ error:"Analytics error" });
+
+}
+
+});
+
+/* ================= ANALYTICS (PROTECTED) ================= */
+
+app.get("/analytics", async (req, res) => {
+
+const key = req.headers["x-admin-key"];
+
+if(key !== process.env.ADMIN_KEY){
+
+return res.status(403).json({ error:"Unauthorized" });
+
+}
+
+try {
+
+let existing = { blocks: [] };
+
+try {
+
+const data = await s3.getObject({
+Bucket: BUCKET,
+Key: "blocks.json"
+}).promise();
+
+existing = JSON.parse(data.Body.toString());
+
+} catch {}
+
+const blocks = existing.blocks || [];
+
+let totalPixels = 1000000;
+let soldPixels = 0;
+let totalRevenue = 0;
+
+/* FIXED CALCULATION */
+
+blocks.forEach(b => {
+
+const width = Number(b.width) || 0;
+const height = Number(b.height) || 0;
+
+const pixels = width * height;
+
+soldPixels += pixels;
+totalRevenue += pixels * 100;
+
+});
+
+const availablePixels = totalPixels - soldPixels;
+res.json({
+
+totalPixels,
+soldPixels,
+availablePixels,
+totalRevenue,
+totalBlocks: blocks.length,
+blocks: blocks.slice(-20).reverse()
+
+});
+
+} catch {
+
+res.status(500).json({ error:"Analytics error" });
+
+}
+
+});

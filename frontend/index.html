@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Million Pixels</title>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+
+body {
+    margin: 0;
+    background: #111;
+    font-family: Arial, sans-serif;
+    overflow: hidden; /* Prevent body scroll, we handle it in wrapper */
+}
+
+/* ========================= */
+/* TITLES & NAV (FIXED TOP)  */
+/* ========================= */
+
+#titlebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 40px;
+    background: #444;
+    color: #ffcc00;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    z-index: 2000;
+    box-sizing: border-box;
+}
+
+#title-left {
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 5px #000;
+}
+
+#title-right {
+    font-size: 14px;
+    color: white;
+    white-space: nowrap;
+}
+
+#navbar {
+    position: fixed;
+    top: 40px; /* Below titlebar */
+    left: 0;
+    width: 100%;
+    height: 50px;
+    background: linear-gradient(to right, #ffcc00, #ffaa00);
+    display: flex;
+    justify-content: center;
+    align-items: center; /* Vertically center buttons */
+    gap: 15px;
+    z-index: 1000;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+}
+
+.nav-btn {
+    background: #000;
+    color: #fff;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    transition: 0.2s;
+}
+
+.nav-btn:hover {
+    background: #00e5b0;
+    color: #000;
+    transform: scale(1.05);
+}
+
+/* ========================= */
+/* NANO BORDER & CANVAS      */
+/* ========================= */
+
+/* This wrapper sits below the headers.
+   It determines the size of the canvas.
+*/
+.nano-wrapper {
+    position: relative;
+    margin-top: 110px; /* 40px title + 50px nav + 20px spacing */
+    margin-left: 20px;
+    margin-right: 20px;
+    
+    /* Calculate height to fit screen exactly */
+    height: calc(100vh - 130px); 
+    
+    background: #111;
+    border-radius: 10px;
+    padding: 4px; /* Thickness of the glowing border */
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(0, 243, 255, 0.1);
+}
+
+/* The Rotating Glow */
+.nano-wrapper::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(
+        transparent, 
+        #00f3ff, 
+        transparent 30%
+    );
+    animation: rotate 4s linear infinite;
+    z-index: 0;
+}
+
+@keyframes rotate {
+    100% { transform: rotate(1turn); }
+}
+
+/* The Canvas sits ON TOP of the glow */
+canvas {
+    display: block;
+    position: relative;
+    z-index: 1; /* Key: Sits above the rotating background */
+    
+    background: #fff;
+    border-radius: 6px; /* Slightly less than wrapper to look clean */
+    
+    width: 100%;
+    height: 100%;
+    
+    /* Pixel Art Rendering*/ 
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: crosshair; 
+}
+
+/* ========================= */
+/* POPUP                     */
+/* ========================= */
+
+#popup {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    justify-content: center;
+    align-items: center;
+    z-index: 3000;
+    backdrop-filter: blur(5px);
+}
+
+#popup-box {
+    background: #1a1a1a;
+    padding: 25px;
+    width: 320px;
+    border-radius: 12px;
+    color: white;
+    text-align: center;
+    border: 1px solid #333;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+
+input {
+    width: 90%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #444;
+    background: #222;
+    color: white;
+    border-radius: 6px;
+    outline: none;
+}
+
+input:focus {
+    border-color: #00e5b0;
+}
+
+button {
+    padding: 12px;
+    margin: 8px;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+    width: 130px;
+    font-weight: bold;
+    transition: 0.2s;
+}
+
+.upload-btn {
+    background: #00e5b0;
+    color: #000;
+}
+.upload-btn:hover { background: #00c49a; }
+
+.cancel-btn {
+    background: #ff4d4d;
+    color: white;
+}
+.cancel-btn:hover { background: #e60000; }
+/* ADD THIS AT THE BOTTOM OF YOUR STYLE TAG */
+@media (max-width: 600px) {
+    /* Stack the title bar items vertically */
+    #titlebar {
+        height: auto;
+        flex-direction: column;
+        padding: 5px;
+        text-align: center;
+    }
+
+    #title-right {
+        font-size: 10px; /* Make stats smaller on phone */
+        white-space: normal; /* Allow text to wrap */
+    }
+
+    /* Move navbar down to accommodate taller title */
+    #navbar {
+        top: 60px; /* Push navbar down slightly */
+        overflow-x: auto; /* Allow scrolling if buttons don't fit */
+        justify-content: flex-start; /* Align left for scrolling */
+        padding-left: 10px;
+    }
+    
+    .nav-btn {
+        font-size: 12px;
+        padding: 5px 10px;
+        flex-shrink: 0; /* Prevent buttons from being squished */
+    }
+
+    /* Adjust the main canvas wrapper to account for the taller header */
+    .nano-wrapper {
+        margin-top: 130px; 
+        height: calc(100vh - 150px);
+    }
+}
+
+/* ADD THIS AT THE BOTTOM OF YOUR STYLE TAG */
+@media (max-width: 600px) {
+    /* Stack the title bar items vertically */
+    #titlebar {
+        height: auto;
+        flex-direction: column;
+        padding: 5px;
+        text-align: center;
+    }
+
+    #title-right {
+        font-size: 10px; /* Make stats smaller on phone */
+        white-space: normal; /* Allow text to wrap */
+    }
+
+    /* Move navbar down to accommodate taller title */
+    #navbar {
+        top: 60px; /* Push navbar down slightly */
+        overflow-x: auto; /* Allow scrolling if buttons don't fit */
+        justify-content: flex-start; /* Align left for scrolling */
+        padding-left: 10px;
+    }
+    
+    .nav-btn {
+        font-size: 12px;
+        padding: 5px 10px;
+        flex-shrink: 0; /* Prevent buttons from being squished */
+    }
+
+    /* Adjust the main canvas wrapper to account for the taller header */
+    .nano-wrapper {
+        margin-top: 130px; 
+        height: calc(100vh - 150px);
+    }
+}
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+    <div id="title-left">The Million Pixels Homepage™</div>
+    <div id="title-right">1,000,000 pixels • ₹100 per pixel • Own history!</div>
+</div>
+
+<div id="navbar">
+    <div class="nav-btn" onclick="showHome()">Home</div>
+    <div class="nav-btn" onclick="openBuyPixels()">Buy Pixels</div>
+    <div class="nav-btn" onclick="showFAQ()">FAQ</div>
+    <div class="nav-btn" onclick="showPixelList()">Pixel List</div>
+    <div class="nav-btn" onclick="showContact()">Contact</div>
+    <div class="nav-btn" onclick="showTerms()">Terms</div>
+
+</div>
+</div>
+<div class="nano-wrapper" id="canvas-container">
+    <canvas id="canvas"></canvas>
+</div>
+
+<div id="popup">
+    <div id="popup-box"></div>
+</div>
+
+<script>
+/* ========================= */
+/* CONFIGURATION             */
+/* ========================= */
+
+// IMPORTANT: Change this to your actual backend URL if different
+const API = "https://millionpixels.duckdns.org"; 
+const socket = io(API);
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const canvasContainer = document.getElementById("canvas-container");
+
+// Optimization for pixel art
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = "high";
+// State Variables
+let blocks = [];
+let images = {};
+let selected = null;
+let isSelecting = false;
+let startX = 0;
+let startY = 0;
+let uploadToken = null;
+
+/* ========================= */
+/* POPUP FUNCTIONS           */
+/* ========================= */
+
+const popup = document.getElementById("popup");
+const popupBox = document.getElementById("popup-box");
+
+/* ========================= */
+/* PROFESSIONAL HOME POPUP   */
+/* ========================= */
+
+function showHome(){
+
+    popupBox.innerHTML = `
+    
+    <h2 style="
+        color: #ffcc00;
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 26px;
+        letter-spacing: 1px;
+    ">
+        Million Pixels Homepage™
+    </h2>
+
+    <p style="
+        color: #ccc;
+        font-size: 15px;
+        line-height: 1.5;
+        margin-bottom: 20px;
+    ">
+        The internet's most unique digital billboard. <br>
+        Claim your space on this global canvas today.
+    </p>
+
+    <div style="
+        text-align: left;
+        background: #222;
+        padding: 15px 20px;
+        border-radius: 10px;
+        border: 1px solid #333;
+        margin-bottom: 25px;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    ">
+        
+        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <div style="font-size: 24px; margin-right: 15px;">🌍</div>
+            <div>
+                <b style="color: #fff; font-size: 15px;">Own History</b>
+                <div style="color: #888; font-size: 12px;">Your spot is yours forever. No subscriptions.</div>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <div style="font-size: 24px; margin-right: 15px;">🚀</div>
+            <div>
+                <b style="color: #fff; font-size: 15px;">High Visibility</b>
+                <div style="color: #888; font-size: 12px;">Upload your brand logo & link to your site.</div>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center;">
+            <div style="font-size: 24px; margin-right: 15px;">💎</div>
+            <div>
+                <b style="color: #00e5b0; font-size: 15px;">₹100 / Pixel</b>
+                <div style="color: #888; font-size: 12px;">Simple, transparent pricing.</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div style="display: flex; gap: 10px; justify-content: center;">
+        <button class="upload-btn" onclick="openBuyPixels()" style="padding: 12px 24px; font-size: 16px;">
+            Start Buying
+        </button>
+        <button class="cancel-btn" onclick="popup.style.display='none'" style="padding: 12px 24px; font-size: 16px; background: #333; color: #fff;">
+            Explore Canvas
+        </button>
+    </div>
+
+    `;
+
+    popup.style.display="flex";
+}
+
+/* ========================= */
+/* UPDATED FAQ FUNCTION      */
+/* ========================= */
+
+function showFAQ(){
+
+    popupBox.innerHTML=`
+    
+    <h2 style="color:#ffcc00; margin-bottom: 20px;">Frequently Asked Questions</h2>
+
+    <div style="
+        text-align: left;
+        max-height: 400px;
+        overflow-y: auto;
+        padding-right: 10px;
+        line-height: 1.6;
+        color: #ddd;
+    ">
+
+        <h3 style="color:#00e5b0; border-bottom:1px solid #333; padding-bottom:5px; margin-top:0;">About the Project</h3>
+        
+        <p><b>What is the Million Pixels Homepage?</b><br>
+        This is a digital billboard and internet time capsule. You can buy pixels, upload your brand logo or personal image, and link it to any website. It is a unique way to own a piece of internet history.</p>
+
+        <p><b>How long will my pixels stay online?</b><br>
+        Forever. Once you buy pixels, they are yours permanently. We intend to keep this homepage online for as long as the internet exists.</p>
+
+        <h3 style="color:#00e5b0; border-bottom:1px solid #333; padding-bottom:5px;">Pricing & Payment</h3>
+
+        <p><b>How much does it cost?</b><br>
+        Each pixel costs <b>₹100</b>. There are no monthly fees or recurring charges. It is a one-time payment for lifetime visibility.</p>
+
+        <p><b>Is the payment secure?</b><br>
+        Yes. We use <b>Razorpay</b>, India's leading payment gateway, to process all transactions securely. We support UPI, Credit/Debit Cards, Netbanking, and Wallets.</p>
+
+        <p><b>Can I get a refund?</b><br>
+        Since this is a digital real-estate product, all sales are final. We cannot offer refunds once the pixels have been reserved and your image is live.</p>
+
+        <h3 style="color:#00e5b0; border-bottom:1px solid #333; padding-bottom:5px;">Images & Links</h3>
+
+        <p><b>Can I change my image or link later?</b><br>
+        Currently, to preserve the historical integrity of the canvas, <b>editing is not supported</b>. Please double-check your image and link before paying.</p>
+
+        <p><b>What kind of images are allowed?</b><br>
+        You can upload logos, pixel art, photos, or ads. <br>
+        <span style="color:#ff4d4d;">Important:</span> We have a strict policy against offensive, illegal, or NSFW content. Such images will be removed without a refund.</p>
+
+        <p><b>What if my image looks blurry?</b><br>
+        The canvas uses "pixelated" rendering to keep art sharp. For best results, ensure your uploaded image dimensions match the number of pixels you selected.</p>
+
+    </div>
+
+    <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
+        <p style="font-size:12px; color:#aaa;">Still have questions?</p>
+        <button onclick="showContact()" class="upload-btn" style="width:auto; padding:8px 20px;">Contact Support</button>
+        <button onclick="popup.style.display='none'" class="cancel-btn">Close</button>
+    </div>
+
+    `;
+
+    popup.style.display="flex";
+
+}
+function showContact(){
+    popupBox.innerHTML=`
+        <h2>Contact</h2>
+        <p>Email support:</p>
+        <a href="mailto:millionpixel1@email.com" style="color:#00e5b0;text-decoration:none;font-size:18px;">
+            millionpixel1@email.com
+        </a>
+        <br><br>
+        <button onclick="popup.style.display='none'" class="cancel-btn">Close</button>
+    `;
+    popup.style.display="flex";
+}
+
+/* ========================= */
+/* UPDATED PIXEL LIST        */
+/* ========================= */
+
+function showPixelList(){
+    let html=`
+        <h2 style="color:#ffcc00; margin-bottom:15px;">Pixel Owners</h2>
+        <div style="max-height:300px; overflow-y:auto; text-align:left; padding-right:5px;">`;
+    
+    if(blocks.length===0){
+        html+=`<p style="text-align:center;color:#666;">No pixels sold yet.</p>`;
+    } else {
+        blocks.forEach(b => {
+            // Logic to ensure the link works even if user typed "google.com" without https://
+            let displayUrl = b.link || "";
+            let clickableUrl = displayUrl;
+            
+            if(clickableUrl && !clickableUrl.startsWith("http")){
+                clickableUrl = "https://" + clickableUrl;
+            }
+
+            html+=`
+            <div style="
+                padding: 12px;
+                margin-bottom: 8px;
+                background: #222;
+                border-left: 3px solid #00e5b0;
+                border-radius: 4px;
+            ">
+                <div style="font-weight:bold; color:white; font-size:16px;">
+                    ${b.name}
+                </div>
+                
+                ${displayUrl ? 
+                    // IF LINK EXISTS: Create a clickable <a> tag
+                    `<a href="${clickableUrl}" target="_blank" style="
+                        color: #00e5b0; 
+                        text-decoration: none; 
+                        font-size: 13px;
+                        display: block;
+                        margin-top: 4px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    ">
+                        🔗 ${displayUrl}
+                    </a>` 
+                    : 
+                    // ELSE: Show 'No link' text
+                    `<small style="color:#666; display:block; margin-top:4px;">No link</small>`
+                }
+            </div>`;
+        });
+    }
+    
+    html+=`</div>
+    <div style="margin-top:15px; border-top:1px solid #333; padding-top:10px;">
+        <button class="cancel-btn" onclick="popup.style.display='none'">Close</button>
+    </div>`;
+    
+    popupBox.innerHTML = html;
+    popup.style.display = "flex";
+}
+/* ========================= */
+/* TERMS & CONDITIONS POPUP  */
+/* ========================= */
+
+function showTerms(){
+    popupBox.innerHTML = `
+        <h2 style="color:#00e5b0; margin-top:0;">Terms & Conditions</h2>
+        
+        <div style="
+            text-align: left; 
+            max-height: 350px; 
+            overflow-y: auto; 
+            background: #222; 
+            padding: 15px; 
+            border-radius: 8px; 
+            font-size: 13px; 
+            color: #ddd; 
+            line-height: 1.6;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        ">
+            <b style="color:#fff">1. Ownership & Duration</b><br>
+            Pixels purchased on Million Pixels Homepage are owned permanently. The image and link will remain active for the lifetime of the website.<br><br>
+
+            <b style="color:#fff">2. Content Guidelines</b><br>
+            We strictly prohibit:
+            <ul style="margin: 5px 0; padding-left: 20px; color: #aaa;">
+                <li>Nudity, pornography, or NSFW content.</li>
+                <li>Hate speech, racism, or illegal content.</li>
+                <li>Malicious links (phishing, malware).</li>
+            </ul>
+            We reserve the right to remove any block violating these rules <b>without refund</b>.<br><br>
+
+            <b style="color:#fff">3. Refunds</b><br>
+            All sales are final. Since this is a digital real estate product, no refunds will be issued once the pixels are reserved.<br><br>
+
+            <b style="color:#fff">4. Liability</b><br>
+            We are not responsible for the content of third-party websites linked from this canvas.
+        </div>
+
+        <button class="cancel-btn" onclick="showHome()" style="width: 100%;">
+            Back to Home
+        </button>
+    `;
+    popup.style.display = "flex";
+}
+/* ========================= */
+/* RESIZE LOGIC (FROM IMAGE) */
+/* ========================= */
+
+function resize(){
+    // Get the container dimensions (controlled by CSS)
+    const rect = canvasContainer.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+
+    // Set internal resolution to match container size * pixel ratio (for sharpness)
+    canvas.width = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+
+    // Reset transform so 1 unit = 1 CSS pixel
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    // Redraw everything
+    draw();
+}
+
+// Listen for window resize
+window.addEventListener("resize", resize);
+// Initial Call
+setTimeout(resize, 100);
+/* ========================= */
+/* DATA LOADING              */
+/* ========================= */
+
+async function load(){
+    try {
+        const res = await fetch(API+"/blocks");
+        const data = await res.json();
+        blocks = data.blocks || [];
+        updatePixelCounter();
+        preload();
+    } catch(e) {
+        console.error("Failed to load blocks", e);
+    }
+}
+
+socket.on("updated", load);
+load();
+
+function updatePixelCounter(){
+    let sold = 0;
+    blocks.forEach(b => sold += (parseInt(b.width)*parseInt(b.height)) || 0);
+    const available = 1000000 - sold;
+    
+    document.getElementById("title-right").innerHTML = `
+        <span style="color:#aaa">Sold:</span> <b style="color:#00e5b0">${sold.toLocaleString()}</b>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span style="color:#aaa">Available:</span> <b>${available.toLocaleString()}</b>
+    `;
+}
+
+function preload() {
+    let count = 0;
+    if (blocks.length === 0) { draw(); return; }
+
+    blocks.forEach(b => {
+        const img = new Image();
+        // Handle URL formats
+        img.src = b.image.startsWith("http") ? b.image : API + "/" + b.image.replace(/^\//, '');
+        
+        img.onload = () => { images[b.image] = img; count++; if(count===blocks.length) draw(); };
+        img.onerror = () => { count++; if(count===blocks.length) draw(); };
+    });
+}
+
+/* ========================= */
+/* DRAWING LOOP              */
+/* ========================= */
+
+function draw() {
+    // 1. Clear Screen
+    // Note: We use the CSS width/height for clearing to match coordinate system
+    const w = canvas.width / (window.devicePixelRatio || 1);
+    const h = canvas.height / (window.devicePixelRatio || 1);
+    
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Draw Sold Blocks
+    blocks.forEach(b => {
+        const img = images[b.image];
+        if (img) {
+            ctx.drawImage(img, b.minCol, b.minRow, b.width, b.height);
+        } else {
+            // Fallback if image fails to load
+            ctx.fillStyle = "#ccc";
+            ctx.fillRect(b.minCol, b.minRow, b.width, b.height);
+        }
+    });
+
+    // 3. Draw Selection Box
+    if (selected) {
+        ctx.fillStyle = "rgba(0, 243, 255, 0.2)";
+        ctx.strokeStyle = "#00f3ff";
+        ctx.lineWidth = 2;
+        
+        // Draw Fill
+        ctx.fillRect(selected.minCol, selected.minRow, selected.width, selected.height);
+        
+        // Draw Border
+        ctx.strokeRect(selected.minCol, selected.minRow, selected.width, selected.height);
+        
+        // Draw Dimensions Text
+        ctx.fillStyle = "black";
+        ctx.font = "12px Arial";
+        const text = `${Math.floor(selected.width)}x${Math.floor(selected.height)}`;
+        ctx.fillText(text, selected.minCol + 2, selected.minRow - 5);
+    }
+}
+
+/* ========================= */
+/* MOUSE INTERACTION         */
+/* ========================= */
+
+function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    // No need to scale manually if using CSS width/height correctly with setTransform
+    return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+}
+
+let isDragging = false;
+
+canvas.addEventListener("mousedown", (e) => {
+    const pos = getMousePos(e);
+    isSelecting = true;
+    isDragging = false;
+    startX = pos.x;
+    startY = pos.y;
+    
+    selected = { minCol: startX, minRow: startY, width: 0, height: 0 };
+    draw();
+});
+
+canvas.addEventListener("mousemove", (e) => {
+    const pos = getMousePos(e);
+    
+    // Hover Effect
+    let hover = false;
+    for(let b of blocks){
+        if(pos.x >= b.minCol && pos.x <= b.minCol+b.width && pos.y >= b.minRow && pos.y <= b.minRow+b.height){
+            hover = true; break;
+        }
+    }
+    canvas.style.cursor = hover ? "pointer" : "crosshair";
+
+    if(isSelecting){
+        let w = pos.x - startX;
+        let h = pos.y - startY;
+        
+        if(Math.abs(w)>2 || Math.abs(h)>2) isDragging = true;
+        
+        selected.width = w;
+        selected.height = h;
+        draw();
+    }
+});
+
+canvas.addEventListener("mouseup", () => {
+    isSelecting = false;
+    if(selected){
+        // Normalize negative width/height
+        if(selected.width < 0){ selected.minCol += selected.width; selected.width *= -1; }
+        if(selected.height < 0){ selected.minRow += selected.height; selected.height *= -1; }
+    }
+    draw();
+});
+
+canvas.addEventListener("click", (e) => {
+    if(isDragging) return; // Ignore click if we just dragged
+    
+    const pos = getMousePos(e);
+    
+    // Check for click on existing block
+    for(let b of blocks){
+        if(pos.x >= b.minCol && pos.x <= b.minCol+b.width && pos.y >= b.minRow && pos.y <= b.minRow+b.height){
+            popupBox.innerHTML = `
+                <h2>${b.name}</h2>
+                <button class="upload-btn" onclick="window.open('${b.link.startsWith('http')?b.link:'https://'+b.link}', '_blank')">Visit Website</button>
+                <button class="cancel-btn" onclick="popup.style.display='none'">Close</button>
+            `;
+            popup.style.display = "flex";
+            selected = null;
+            draw();
+            return;
+        }
+    }
+    
+    // Default 20x20 selection on click
+    if(!isDragging){
+        const size = 20;
+        selected = { minCol: pos.x - size/2, minRow: pos.y - size/2, width: size, height: size };
+        draw();
+    }
+});
+
+/* ========================= */
+/* PAYMENT & UPLOAD          */
+/* ========================= */
+
+function openBuyPixels(){
+    if(!selected || selected.width < 1 || selected.height < 1){
+        alert("Please select an area on the canvas first.");
+        return;
+    }
+    
+    const pixels = Math.floor(selected.width) * Math.floor(selected.height);
+    const price = pixels * 100;
+    
+    popupBox.innerHTML=`
+        <h2>Secure Your Spot</h2>
+        <div style="text-align:left; background:#222; padding:10px; border-radius:8px; margin-bottom:10px;">
+            <p style="margin:5px 0">Pixels: <b>${pixels}</b></p>
+            <p style="margin:5px 0">Total: <b style="color:#00e5b0; font-size:18px">₹${price}</b></p>
+        </div>
+        <input id="name" placeholder="Brand / Name">
+        <input id="link" placeholder="Website Link (e.g. google.com)">
+        <input type="file" id="file" accept="image/*">
+        <br>
+        <button class="upload-btn" onclick="payNow()">Pay & Upload</button>
+        <button class="cancel-btn" onclick="popup.style.display='none'">Cancel</button>
+    `;
+    popup.style.display="flex";
+}
+
+/* ========================= */
+/* UPDATED PAYNOW FUNCTION   */
+/* ========================= */
+
+async function payNow(){
+    if(!selected){ 
+        alert("Select pixels first"); 
+        return; 
+    }
+    
+    // 1. MANDATORY NAME CHECK
+    const nameInput = document.getElementById("name");
+    const nameValue = nameInput ? nameInput.value.trim() : "";
+
+    if (!nameValue) {
+        alert("Please enter a Brand / Name.");
+        if(nameInput) nameInput.focus();
+        return;
+    }
+
+    // 2. MANDATORY IMAGE CHECK (NEW)
+    const fileInput = document.getElementById("file");
+    if (!fileInput || fileInput.files.length === 0) {
+        alert("Please select an image to upload.");
+        return; 
+    }
+
+    const pixels = Math.floor(selected.width) * Math.floor(selected.height);
+    const amount = pixels * 100; // Amount in Rupees
+    
+    // UI Feedback
+    const btn = document.querySelector('.upload-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "Processing...";
+    btn.disabled = true;
+
+    try {
+        // 3. CREATE ORDER
+        const orderRes = await fetch(API+"/create-order", {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({ amount })
+        });
+        
+        if(!orderRes.ok) throw new Error("Server Order Error");
+        const order = await orderRes.json();
+
+        // 4. OPEN RAZORPAY
+        const options = {
+            key: "rzp_test_SIVS9hgtVpXuFO", 
+            amount: order.amount,
+            currency: "INR",
+            name: "Million Pixels",
+            description: `Buying ${pixels} pixels`,
+            order_id: order.id,
+            handler: async function(response){
+                try {
+                    btn.innerText = "Verifying...";
+                    
+                    const verifyRes = await fetch(API+"/verify-payment", {
+                        method:"POST",
+                        headers:{ "Content-Type":"application/json" },
+                        body:JSON.stringify(response)
+                    });
+                    
+                    if(!verifyRes.ok) throw new Error("Verification Server Error");
+                    
+                    const verify = await verifyRes.json();
+                    
+                    if(verify.success){
+                        uploadToken = verify.token;
+                        await upload(); 
+                    } else {
+                        alert("Payment verification failed: " + verify.error);
+                    }
+                } catch(e) {
+                    console.error(e);
+                    alert("Error verifying payment. Check console.");
+                } finally {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            },
+            modal: {
+                ondismiss: function(){
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            }
+        };
+        
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function (response){
+            alert("Payment Failed: " + response.error.description);
+            btn.innerText = originalText;
+            btn.disabled = false;
+        });
+        rzp.open();
+
+    } catch(err) {
+        console.error(err);
+        alert("Could not start payment. Is the backend running?");
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+async function upload(){
+    if(!uploadToken){ alert("Payment not verified"); return; }
+    
+    const name = document.getElementById("name").value;
+    const link = document.getElementById("link").value;
+    const file = document.getElementById("file").files[0];
+    
+    if(!name || !file) { alert("Name and Image are required!"); return; }
+
+    try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("token", uploadToken);
+        
+        // 1. Upload Image to S3
+        const upRes = await fetch(API+"/upload", { method:"POST", body:fd });
+        const upData = await upRes.json();
+        
+        if(!upData.url) throw new Error("Image upload failed");
+
+        // 2. Save Block Data
+        await fetch(API+"/save", {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify({
+                image: upData.url,
+                name,
+                link,
+                ...selected,
+                token: uploadToken
+            })
+        });
+        
+        alert("Success! Your pixels are live.");
+        popup.style.display="none";
+        load(); // Refresh canvas
+
+    } catch(e) {
+        console.error(e);
+        alert("Upload failed. Please contact support if money was deducted.");
+    }
+}
+/* ========================= */
+/* MOBILE TOUCH SUPPORT      */
+/* ========================= */
+
+// 1. Helper to get Touch Coordinates
+function getTouchPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1; 
+    // We do NOT multiply by ratio here because getBoundingClientRect is in CSS pixels
+    // and the canvas CSS width matches. The SetTransform in resize handles the ratio.
+    const touch = e.touches[0] || e.changedTouches[0];
+    return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+    };
+}
+
+// 2. Touch Start (Start Selecting)
+canvas.addEventListener("touchstart", function (e) {
+    if(e.target == canvas) {
+        e.preventDefault(); // CRITICAL: This stops the mobile page from scrolling
+        const pos = getTouchPos(e);
+        
+        startX = pos.x;
+        startY = pos.y;
+        
+        isSelecting = true;
+        isDragging = false; // Reset drag status
+        
+        selected = { minCol: startX, minRow: startY, width: 0, height: 0 };
+        draw();
+    }
+}, { passive: false });
+
+// 3. Touch Move (Drag Selection)
+canvas.addEventListener("touchmove", function (e) {
+    if(isSelecting) {
+        e.preventDefault(); // Stop scrolling while dragging
+        const pos = getTouchPos(e);
+        
+        // Calculate width/height
+        let w = pos.x - startX;
+        let h = pos.y - startY;
+
+        // If moved more than 5 pixels, consider it a drag
+        if(Math.abs(w) > 5 || Math.abs(h) > 5) isDragging = true;
+
+        selected.width = w;
+        selected.height = h;
+        draw();
+    }
+}, { passive: false });
+
+// 4. Touch End (Finish Selection OR Detect Tap)
+canvas.addEventListener("touchend", function (e) {
+    e.preventDefault();
+    isSelecting = false;
+    
+    // Fix negative width/height (drawing backwards)
+    if(selected){
+         if(selected.width < 0){ selected.minCol += selected.width; selected.width *= -1; }
+         if(selected.height < 0){ selected.minRow += selected.height; selected.height *= -1; }
+    }
+    
+    // LOGIC FOR TAP (If user didn't drag, treat as a Click)
+    if(!isDragging) {
+         const pos = getTouchPos(e);
+         
+         // A. Check if tapped on a Sold Block
+         for(let b of blocks){
+            if(pos.x >= b.minCol && pos.x <= b.minCol+b.width && pos.y >= b.minRow && pos.y <= b.minRow+b.height){
+                 // Open Popup
+                 popupBox.innerHTML = `
+                    <h2>${b.name}</h2>
+                    <button class="upload-btn" onclick="window.open('${b.link.startsWith('http')?b.link:'https://'+b.link}', '_blank')">Visit Website</button>
+                    <button class="cancel-btn" onclick="popup.style.display='none'">Close</button>
+                `;
+                popup.style.display = "flex";
+                selected = null;
+                draw();
+                return;
+            }
+         }
+
+         // B. If empty space, create default 20x20 box
+         const size = 20;
+         selected = { minCol: pos.x - size/2, minRow: pos.y - size/2, width: size, height: size };
+    }
+    
+    draw();
+}, { passive: false });
+</script>
+
+</body>
+</html>
