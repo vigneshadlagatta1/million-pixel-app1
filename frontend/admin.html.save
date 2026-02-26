@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Million Pixels Admin</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<style>
+    /* ================= DARK THEME CSS ================= */
+    body { background: #111; color: #fff; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 20px; }
+    
+    /* HEADER & CONNECTION STATUS */
+    .header { 
+        background: #000; padding: 20px; border-radius: 12px; 
+        border: 1px solid #333; margin-bottom: 20px; 
+        display: flex; justify-content: space-between; align-items: center; 
+    }
+    .header h1 { margin: 0; color: #00e5b0; font-size: 24px; }
+    
+    .status-badge { 
+        font-size: 12px; padding: 4px 12px; border-radius: 20px; 
+        background: #222; display: inline-flex; align-items: center; gap: 8px; margin-top: 5px;
+        border: 1px solid #333;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4444; transition: 0.3s; }
+    .online .dot { background: #00e5b0; box-shadow: 0 0 8px #00e5b0; }
+
+    /* STATS GRID */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    
+    .card { 
+        background: #0a0a0a; padding: 20px; border-radius: 12px; 
+        border: 1px solid #222; box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+    }
+    .card h3 { margin: 0 0 10px 0; color: #888; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+    .big { font-size: 32px; color: #fff; font-weight: bold; }
+    .highlight { color: #00e5b0; }
+
+    /* BUYERS LIST (SCROLLABLE) */
+    .list-container { 
+        margin-top: 20px; background: #000; padding: 20px; 
+        border-radius: 12px; border: 1px solid #222;
+        /* Scrollbar Logic */
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    /* Custom Scrollbar for Dark Mode */
+    .list-container::-webkit-scrollbar { width: 8px; }
+    .list-container::-webkit-scrollbar-track { background: #111; }
+    .list-container::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    .list-container::-webkit-scrollbar-thumb:hover { background: #00e5b0; }
+    
+    .item { 
+        background: #111; padding: 15px; margin: 10px 0; border-radius: 8px; 
+        display: flex; justify-content: space-between; align-items: center; 
+        border-left: 3px solid #333; transition: 0.2s;
+    }
+    .item:hover { border-left: 3px solid #00e5b0; background: #161616; }
+    
+    .item-info b { color: #fff; font-size: 1.1em; display:block; margin-bottom: 4px;}
+    .item-info span { color: #888; font-size: 0.85em; }
+    .item-link { color: #00e5b0; text-decoration: none; font-size: 0.85em; display: inline-block; margin-top: 4px;}
+
+    /* BUTTONS */
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+    .btn-refresh { background: #333; color: #fff; }
+    .btn-refresh:hover { background: #444; }
+    
+    .btn-logout { background: transparent; color: #ff4444; border: 1px solid #ff4444; margin-left: 10px; }
+    .btn-logout:hover { background: #ff4444; color: #fff; }
+    
+    .btn-delete { background: #2a1111; color: #ff6b6b; padding: 6px 12px; font-size: 12px; }
+    .btn-delete:hover { background: #ff4444; color: white; }
+    .btn-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1>Admin Dashboard</h1>
+        <div id="connectionStatus" class="status-badge">
+            <div class="dot"></div> <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+    <div>
+        <button class="btn btn-refresh" onclick="loadAnalytics()">↻ Refresh</button>
+        <button class="btn btn-logout" onclick="logout()">Logout</button>
+    </div>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h3>Total Revenue</h3>
+        <div id="revenue" class="big highlight">₹0</div>
+    </div>
+    <div class="card">
+        <h3>Sold Pixels</h3>
+        <div id="sold" class="big">0</div>
+    </div>
+    <div class="card">
+        <h3>Available</h3>
+        <div id="available" class="big">0</div>
+    </div>
+    <div class="card">
+        <h3>Total Blocks</h3>
+        <div id="blocks" class="big">0</div>
+    </div>
+</div>
+
+<div class="list-container">
+    <h3>All Buyers History (Newest First)</h3>
+    <div id="buyers">Loading...</div>
+</div>
+
+<script>
+    /* ================= CONFIG ================= */
+    
+    // LIVE SERVER URL
+    const API = "http//98.87.56.2:5000";
+
+    /* ========================================== */
+
+    const adminKey = localStorage.getItem("adminKey");
+
+    // Redirect if no key found
+    if(!adminKey) window.location = "admin-login.html";
+
+    /* ================= SOCKET SETUP ================= */
+    const socket = io(API, {
+        reconnection: true,
+        reconnectionAttempts: 5
+    });
+
+    const statusDiv = document.getElementById("connectionStatus");
+    const statusText = document.getElementById("statusText");
+
+    socket.on("connect", () => {
+        statusDiv.classList.add("online");
+        statusText.innerText = "Live Connected";
+        loadAnalytics();
+    });
+
+    socket.on("disconnect", () => {
+        statusDiv.classList.remove("online");
+        statusText.innerText = "Offline";
+    });
+
+    // Listen for updates from other users
+    socket.on("updated", () => {
+        console.log("Update received");
+        loadAnalytics();
+    });
+
+    /* ================= LOAD ANALYTICS ================= */
+    async function loadAnalytics(){
+        try {
+            // Add timestamp to prevent caching
+            const res = await fetch(`${API}/analytics?t=${Date.now()}`, {
+                headers: { "x-admin-key": adminKey }
+            });
+
+            if(res.status === 403){
+                alert("Session expired.");
+                logout();
+                return;
+            }
+
+            const data = await res.json();
+
+            // 1. UPDATE STATS
+            document.getElementById("revenue").innerText = "₹" + (data.totalRevenue || 0).toLocaleString();
+            document.getElementById("sold").innerText = (data.soldPixels || 0).toLocaleString();
+            document.getElementById("available").innerText = (data.availablePixels || 0).toLocaleString();
+            document.getElementById("blocks").innerText = (data.totalBlocks || 0).toLocaleString();
+
+            // 2. UPDATE LIST
+            const list = document.getElementById("buyers");
+            const blocks = data.blocks || []; // This array is REVERSED (Newest first)
+            const totalCount = data.totalBlocks || 0;
+
+            if(blocks.length === 0){
+                list.innerHTML = "<p style='color:#666'>No blocks sold yet.</p>";
+                return;
+            }
+
+            let html = "";
+            
+            blocks.forEach((b, index) => {
+                const width = Number(b.width);
+                const height = Number(b.height);
+                const px = width * height;
+
+                // CRITICAL MATH FIX: 
+                // Because the list is displayed reversed (Newest at top), 
+                // Index 0 in this loop is actually the LAST item in the database array.
+                // We must calculate the "Real Index" to delete the correct item.
+                
+                const realIndex = (totalCount - 1) - index;
+
+                html += `
+                <div class="item">
+                    <div class="item-info">
+                        <b>${b.name}</b>
+                        <span>${px.toLocaleString()} px (${width}x${height})</span>
+                        <br>
+                        ${b.link ? `<a href="${b.link}" target="_blank" class="item-link">${b.link}</a>` : ''}
+                    </div>
+                    <button class="btn btn-delete" 
+                        onclick="deleteBlock(this, ${realIndex}, '${b.name}')">
+                        Delete
+                    </button>
+                </div>`;
+            });
+
+            list.innerHTML = html;
+
+        } catch(err) {
+            console.error("Load failed:", err);
+            document.getElementById("buyers").innerHTML = `
+                <p style="color:#ff4444">
+                    ⚠️ <b>Connection Error:</b><br>
+                    ${err.message}<br>
+                    Trying to connect to: <b>${API}</b>
+                </p>`;
+        }
+    }
+
+    /* ================= DELETE FUNCTION ================= */
+    async function deleteBlock(btn, realIndex, name){
+        
+        if(!confirm(`⚠️ DELETE WARNING\n\nAre you sure you want to delete "${name}"?`)) return;
+
+        btn.innerText = "...";
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`${API}/delete-block`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-admin-key": adminKey
+                },
+                body: JSON.stringify({ index: realIndex })
+            });
+
+            const data = await res.json();
+
+            if(data.success){
+                // Success: Wait for socket update or reload manually
+                loadAnalytics();
+            } else {
+                alert("Delete failed: " + (data.error || "Unknown"));
+                btn.innerText = "Delete";
+                btn.disabled = false;
+            }
+
+        } catch(err) {
+            alert("Network error");
+            btn.innerText = "Delete";
+            btn.disabled = false;
+        }
+    }
+
+    function logout(){
+        localStorage.removeItem("adminKey");
+        window.location = "admin-login.html";
+    }
+
+    // Auto refresh every 20s just in case
+    setInterval(loadAnalytics, 20000);
+
+</script>
+</body>
+</html>

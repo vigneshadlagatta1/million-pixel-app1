@@ -85,19 +85,6 @@ function isOverlapping(newBlock, blocks) {
     );
 }
 
-/* ================= ADMIN AUTH ================= */
-
-function verifyAdmin(req, res, next) {
-
-    const key = req.headers["x-admin-key"];
-
-    if (!key || key !== process.env.ADMIN_KEY) {
-        return res.status(403).json({ error: "Unauthorized" });
-    }
-
-    next();
-}
-
 /* ================= API ROUTES ================= */
 
 // 1. GET ALL BLOCKS
@@ -112,116 +99,6 @@ app.get("/blocks", async (req, res) => {
         res.json({ blocks: [] });
     }
 });
-
-/* ================= GET ANALYTICS ================= */
-
-app.get("/analytics", verifyAdmin, async (req, res) => {
-
-    try {
-
-        let data = { blocks: [] };
-
-        try {
-            const file = await s3.getObject({
-                Bucket: BUCKET,
-                Key: "blocks.json"
-            }).promise();
-
-            data = JSON.parse(file.Body.toString());
-
-        } catch(e) {}
-
-        const blocks = data.blocks || [];
-
-        let soldPixels = 0;
-        let totalRevenue = 0;
-
-        blocks.forEach(b => {
-
-            const pixels = Number(b.width) * Number(b.height);
-            soldPixels += pixels;
-            totalRevenue += pixels * 100;
-
-        });
-
-        const totalPixels = 1000000;
-
-        res.json({
-
-            totalRevenue,
-            soldPixels,
-            availablePixels: totalPixels - soldPixels,
-            totalBlocks: blocks.length,
-
-            // reverse for newest first
-            blocks: [...blocks].reverse()
-
-        });
-
-    } catch(err) {
-
-        console.error(err);
-
-        res.status(500).json({ error: "Analytics failed" });
-
-    }
-
-});
-
-
-/* ================= DELETE BLOCK ================= */
-
-app.post("/delete-block", verifyAdmin, async (req, res) => {
-
-    try {
-
-        const { index } = req.body;
-
-        if (index === undefined)
-            return res.json({ success: false, error: "Index required" });
-
-        let data = { blocks: [] };
-
-        try {
-
-            const file = await s3.getObject({
-                Bucket: BUCKET,
-                Key: "blocks.json"
-            }).promise();
-
-            data = JSON.parse(file.Body.toString());
-
-        } catch(e) {}
-
-        if (index < 0 || index >= data.blocks.length)
-            return res.json({ success: false, error: "Invalid index" });
-
-        data.blocks.splice(index, 1);
-
-        await s3.putObject({
-
-            Bucket: BUCKET,
-            Key: "blocks.json",
-            Body: JSON.stringify(data),
-            ContentType: "application/json"
-
-        }).promise();
-
-        io.emit("updated");
-
-        res.json({ success: true });
-
-    } catch(err) {
-
-        console.error(err);
-
-        res.json({ success: false, error: "Delete failed" });
-
-    }
-
-});
-
-
 
 // 2. CREATE PAYMENT ORDER
 // ... inside server.js
