@@ -836,15 +836,14 @@ function openBuyPixels(){
 }
 
 /* ========================= */
-/* UPDATED PAYNOW FUNCTION   */
-/* ========================= */
-
 async function payNow(){
-    if(!selected){ 
-        alert("Select pixels first"); 
-        return; 
+
+    // Check selection
+    if(!selected){
+        alert("Select pixels first");
+        return;
     }
-    
+
     // 1. MANDATORY NAME CHECK
     const nameInput = document.getElementById("name");
     const nameValue = nameInput ? nameInput.value.trim() : "";
@@ -855,16 +854,13 @@ async function payNow(){
         return;
     }
 
-    // 2. MANDATORY IMAGE CHECK (NEW)
+    // 2. MANDATORY IMAGE CHECK
     const fileInput = document.getElementById("file");
     if (!fileInput || fileInput.files.length === 0) {
         alert("Please select an image to upload.");
-        return; 
+        return;
     }
 
-    const pixels = Math.floor(selected.width) * Math.floor(selected.height);
-    const amount = pixels * 100; // Amount in Rupees
-    
     // UI Feedback
     const btn = document.querySelector('.upload-btn');
     const originalText = btn.innerText;
@@ -872,75 +868,83 @@ async function payNow(){
     btn.disabled = true;
 
     try {
-        // 3. CREATE ORDER
-        const orderRes = await fetch(API+"/create-order", {
-            method:"POST",
-            headers:{ "Content-Type":"application/json" },
-            body:JSON.stringify({ amount })
-        });
-        
-        if(!orderRes.ok) throw new Error("Server Order Error");
-        const order = await orderRes.json();
 
-        // 4. OPEN RAZORPAY
-        const options = {
-            key: "rzp_test_SIVS9hgtVpXuFO", 
-            amount: order.amount,
-            currency: "INR",
-            name: "Million Pixels",
-            description: `Buying ${pixels} pixels`,
-            order_id: order.id,
-            handler: async function(response){
-                try {
-                    btn.innerText = "Verifying...";
-                    
-                    const verifyRes = await fetch(API+"/verify-payment", {
-                        method:"POST",
-                        headers:{ "Content-Type":"application/json" },
-                        body:JSON.stringify(response)
-                    });
-                    
-                    if(!verifyRes.ok) throw new Error("Verification Server Error");
-                    
-                    const verify = await verifyRes.json();
-                    
-                    if(verify.success){
-                        uploadToken = verify.token;
-                        await upload(); 
-                    } else {
-                        alert("Payment verification failed: " + verify.error);
-                    }
-                } catch(e) {
-                    console.error(e);
-                    alert("Error verifying payment. Check console.");
-                } finally {
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                }
-            },
-            modal: {
-                ondismiss: function(){
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                }
-            }
-        };
-        
-        const rzp = new Razorpay(options);
-        rzp.on('payment.failed', function (response){
-            alert("Payment Failed: " + response.error.description);
+        // 3. CALCULATE PIXELS
+        const pixels = Math.floor(selected.width) * Math.floor(selected.height);
+
+        // 4. LIMIT CHECK (₹5,00,000 max)
+        if (pixels > 5000) {
+            alert("Maximum allowed pixels is 5000 (₹5,00,000 limit)");
             btn.innerText = originalText;
             btn.disabled = false;
+            return;
+        }
+
+        // 5. CALCULATE PRICE (₹100 per pixel)
+        const price = pixels * 100;
+
+        console.log("Pixels:", pixels);
+        console.log("Price:", price);
+
+        // 6. CREATE ORDER FROM BACKEND
+        const orderRes = await fetch(API + "/create-order", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ amount: price })
         });
+
+        if (!orderRes.ok) {
+            throw new Error("Server Order Error");
+        }
+
+        const order = await orderRes.json();
+
+        console.log("Order created:", order);
+
+        // 7. OPEN RAZORPAY CHECKOUT
+        const options = {
+            key: "rzp_live_SLgux2j0z9UD76",
+            name: "Million Pixels",
+            description: `${pixels} pixels purchase`,
+            order_id: order.id,
+
+            handler: async function (response) {
+
+                alert("Payment Successful!");
+
+                console.log("Payment response:", response);
+
+                // You can add upload logic here
+
+                btn.innerText = "Success";
+            },
+
+            prefill: {
+                name: nameValue
+            },
+
+            theme: {
+                color: "#00ff88"
+            }
+        };
+
+        const rzp = new Razorpay(options);
         rzp.open();
 
-    } catch(err) {
-        console.error(err);
-        alert("Could not start payment. Is the backend running?");
+    }
+    catch(err){
+
+        console.error("Payment Error:", err);
+
+        alert("Payment Failed: " + err.message);
+
         btn.innerText = originalText;
         btn.disabled = false;
     }
 }
+
 async function upload(){
     if(!uploadToken){ alert("Payment not verified"); return; }
     
